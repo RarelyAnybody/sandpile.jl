@@ -1,3 +1,5 @@
+using SparseArrays, LinearAlgebra
+
 n = 5
 m = 5
 
@@ -57,7 +59,82 @@ function findId(a)
         last = next
     end
 end
-    
+
+# Δ = A - D
+function Δ(n, m)
+    # x, y are coordinates in Δ
+    xs = Array{Int64, 1}()
+    ys = Array{Int64, 1}()
+    vals = Array{BigInt, 1}()
+    # coordinates in pile
+    for col = 1:n
+        for row = 1:m
+            # A
+            push!(xs,  (row-1)*n+col)
+            push!(ys,  (row-1)*n+col)
+            push!(vals, 4)
+            # D
+            rowNeighbour = row - 1
+            if rowNeighbour > 0
+                push!(xs,  (rowNeighbour-1)*n+col)
+                push!(ys,  (row-1)*n+col)
+                push!(vals, -1)
+                push!(xs,  (row-1)*n+col)
+                push!(ys,  (rowNeighbour-1)*n+col)
+                push!(vals, -1)
+            end
+            rowNeighbour = row + 1
+            if rowNeighbour < m
+                push!(xs,  (rowNeighbour-1)*n+col)
+                push!(ys,  (row-1)*n+col)
+                push!(vals, -1)
+                push!(xs,  (row-1)*n+col)
+                push!(ys,  (rowNeighbour-1)*n+col)
+                push!(vals, -1)
+            end
+            colNeighbour = col - 1
+            if colNeighbour > 0
+                push!(xs,  (row-1)*n+colNeighbour)
+                push!(ys,  (row-1)*n+col)
+                push!(vals, -1)
+                push!(xs,  (row-1)*n+col)
+                push!(ys,  (row-1)*n+colNeighbour)
+                push!(vals, -1)
+            end
+            colNeighbour = col + 1
+            if colNeighbour < n
+                push!(xs,  (row-1)*n+colNeighbour)
+                push!(ys,  (row-1)*n+col)
+                push!(vals, -1)
+                push!(xs,  (row-1)*n+col)
+                push!(ys,  (row-1)*n+colNeighbour)
+                push!(vals, -1)
+            end
+        end
+    end
+    # If an index i,j occures more than once,
+    # sparse(..) defaults to adding the values, we need max?
+    #    println(vals)
+    sparse(xs, ys, vals, n*m, n*m, max)
+end
+
+
+b(n,m) = sum(Matrix(Δ(n, m)), dims = 1)
+
+function bij(n,m)
+    bb = b(n,m)
+    r = zeros(Int64,n,m)
+    for i in 1:n
+        for j in 1:m
+            r[i,j] = bb[(i-1)*m+j]
+        end
+    end
+    r
+end
+
+d(n,m) = numerator(det(Matrix(Δ(n, m)).//1))
+
+
 #=
 
 julia> @time id1 = findId(maxPile(1,1))
@@ -201,3 +278,40 @@ julia> @time id12 = findId(maxPile(12,12))
 
 
 =#
+
+#=
+Notes:
+
+p6, Lemma 2.9
+
+delta: delta[i] = d_i ??
+not stable! (???)
+
+p8
+
+Let sigma = 2 delta - 2
+
+now stabilise(sigma) <= delta - 1
+
+thus
+
+sigma - stabilize(sigma) >= delta - 1
+
+thus sigma - stabilise(sigma) is accessible
+
+I = stabilise(sigma - stabilise(sigma))
+
+
+=#
+
+# Holroyd, Levine, M´esz´aros, Peres, Propp and Wilson
+# "Chip-Firing and Rotor-Routing on Directed Graphs", p8
+# may I take any delta???
+function findId(n,m)
+    δ = fill(4,n,m) - bij(n,m) #maxPile(n,m)
+    # σ = 2δ - 2
+    σ = pileOver(pileOver(δ, δ), fill(-2,n,m))
+    s1 = topplePile!(copy(σ))
+    s2 = pileOver(σ, -1 .* s1)
+    topplePile!(s2)
+end
