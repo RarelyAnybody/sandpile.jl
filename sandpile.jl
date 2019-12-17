@@ -26,6 +26,7 @@ end
 
 function topplePile!(a)
     done = false
+    allTopples  = 0
     while !done
         count = 0
         n, m = size(a)
@@ -37,8 +38,10 @@ function topplePile!(a)
                 end
             end
         end
+        allTopples = allTopples + count
         done = count == 0
     end
+    println(allTopples, " toppled.")
     a
 end
 
@@ -121,13 +124,29 @@ end
 
 b(n,m) = sum(Matrix(Δ(n, m)), dims = 1)
 
-function bij(n,m)
+# should for any graph
+# seems to do only for n x n
+function bij_any(n,m)
     bb = b(n,m)
     r = zeros(Int64,n,m)
     for i in 1:n
         for j in 1:m
             r[i,j] = bb[(i-1)*m+j]
         end
+    end
+    r
+end
+
+
+function bij(n,m)
+    r = zeros(Int64,n,m)
+    for i in 1:m
+        r[1, i] = r[1,i] + 1
+        r[n, i] = r[n,i] + 1
+    end
+    for j in 1:n
+        r[j, 1] = r[j,1] + 1
+        r[j, m] = r[j,m] + 1
     end
     r
 end
