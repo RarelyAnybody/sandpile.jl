@@ -7,7 +7,7 @@ maxPile(n, m) = fill(3, n, m)
 
 pileOver(a, b) = a .+ b
 
-function toppleSize!(a, i, j)
+function toppleSite!(a, i, j)
     n, m = size(a)
     a[i,j] = a[i,j] - 4
     if i > 1
@@ -26,23 +26,24 @@ end
 
 function topplePile!(a)
     done = false
-    allTopples  = 0
+    n, m = size(a)
+    old = a
+    new = a
     while !done
         count = 0
-        n, m = size(a)
+        new = copy(old)
         for i = 1:n
             for j = 1:m
-                if a[i,j] > 3
-                    toppleSize!(a, i, j)
+                if old[i,j] > 3
+                    toppleSite!(new, i, j)
                     count = count + 1
                 end
             end
         end
-        allTopples = allTopples + count
+        old = new
         done = count == 0
     end
-    println(allTopples, " toppled.")
-    a
+    new
 end
 
 addPiles(a,b) = topplePile!(pileOver(a,b))
@@ -121,11 +122,10 @@ function Δ(n, m)
     sparse(xs, ys, vals, n*m, n*m, max)
 end
 
-
 b(n,m) = sum(Matrix(Δ(n, m)), dims = 1)
 
 # should for any graph
-# seems to do only for n x n
+# seems to do only for n x n, otherwise buggy
 function bij_any(n,m)
     bb = b(n,m)
     r = zeros(Int64,n,m)
@@ -137,7 +137,10 @@ function bij_any(n,m)
     r
 end
 
-
+# Caracciolo, Paoletti, Sportiello,
+# "Explicit characterization of the identity configuration
+# in an Abelian Sandpile Model", p 1
+# (formula applies for rectangular configurations only)
 function bij(n,m)
     r = zeros(Int64,n,m)
     for i in 1:m
@@ -153,9 +156,7 @@ end
 
 d(n,m) = numerator(det(Matrix(Δ(n, m)).//1))
 
-
 #=
-
 julia> @time id1 = findId(maxPile(1,1))
 4
   0.000090 seconds (19 allocations: 992 bytes)
@@ -323,9 +324,9 @@ I = stabilise(sigma - stabilise(sigma))
 
 =#
 
+
 # Holroyd, Levine, M´esz´aros, Peres, Propp and Wilson
 # "Chip-Firing and Rotor-Routing on Directed Graphs", p8
-# may I take any delta???
 function findId(n,m)
     δ = fill(4,n,m) - bij(n,m) #maxPile(n,m)
     # σ = 2δ - 2
@@ -334,3 +335,150 @@ function findId(n,m)
     s2 = pileOver(σ, -1 .* s1)
     topplePile!(s2)
 end
+
+# Holroyd, Levine, M´esz´aros, Peres, Propp and Wilson
+# "Chip-Firing and Rotor-Routing on Directed Graphs", p10
+function invPile(p)
+    n, m = size(p)
+    δ = fill(4,n,m) - bij(n,m) #maxPile(n,m)
+    # x = 3δ - 3
+    x = pileOver(pileOver(pileOver(δ, δ), δ), fill(-3,n,m))
+    xt = topplePile!(copy(x))
+    y = pileOver(pileOver(x, -1 .* xt), -1 .* p)
+    # inv = topple(x - topple(x) - p)
+    topplePile!(y)
+end
+
+function multPile(n, p)
+    m1, m2 = size(p)
+    if n == 0
+        findId(m1,m2)
+    elseif n < 0
+        ip = invPile(p)
+        multPile(-n, ip)
+    else
+        return addPiles(p, multPile(n-1, p))
+    end
+end
+
+# Faster than multPile, but not as much as I hoped for.
+function multPile2(n, p)
+    m1, m2 = size(p)
+    if n == 0
+        findId(m1,m2)
+    elseif n < 0
+        ip = invPile(p)
+        multPile2(-n, ip)
+    else
+        pp = n .* p
+        return topplePile!(pp)
+    end
+end
+
+
+using Test
+
+function test01(n, m)
+    idNM   = findId(n, m)
+    @test idNM == multPile(3,idNM)
+    rNMpre = rand(0:3, n, m)
+    rNM    = addPiles(rNMpre, idNM)
+    rNMi   = invPile(rNM)
+    @test rNM == addPiles(rNM, idNM)
+    @test rNM == addPiles(idNM, rNM)
+    @test rNMi == addPiles(rNMi, idNM)
+    @test rNMi == addPiles(idNM, rNMi)
+    @test addPiles(rNM, rNMi) == idNM
+end
+
+function test02(n, m, howMany = 10)
+    @testset "random piles are stable" begin
+        for i in 1:howMany
+            p = rand(0:3, n, m)
+            @test p == topplePile!(copy(p))
+        end
+    end
+    :done
+end
+    
+using Plots
+# gr() # default
+
+colorscale = 1
+
+# how do I provide a color coding?
+# note that instable piles have to be coded too. How many?
+# current GR may have the option levels=10
+# https://discourse.julialang.org/t/plots-jl-how-can-i-get-discrete-colors-in-the-colorbar-of-a-heatmap/29660/4
+# , legend=false
+function plt(p; title = nothing)
+    if title != nothing
+        heatmap(p, axis = false, aspect_ratio=1, title = title)
+    else
+        heatmap(p, axis = false, aspect_ratio=1)
+    end
+end
+    
+function addPlotting(p1, p2, fileName)
+    p = pileOver(p1, p2)
+    done = false
+    n, m = size(p)
+    steps = 0
+    old = p
+    new = p
+    anim = Animation()
+    pic = plt(p1, title = "First argument") # 4 times
+    frame(anim, pic)
+    frame(anim, pic)
+    frame(anim, pic)
+    frame(anim, pic)
+    pic = plt(p2, title = "Second argument") # 4 times
+    frame(anim, pic)
+    frame(anim, pic)
+    frame(anim, pic)
+    frame(anim, pic)
+    pic = plt(old, title = "Start") # 4 times
+    frame(anim, pic)
+    frame(anim, pic)
+    frame(anim, pic) # and once in the loop
+    while !done
+        if steps != 0
+            title = string(steps)
+        else
+            title = "Start"
+        end
+        pic = plt(old, title = title)
+        frame(anim, pic)
+        steps = steps + 1
+        print(steps, "/")
+        new = copy(old)
+        count = 0
+        for i = 1:n
+            for j = 1:m
+                if old[i,j] > 3
+                    toppleSize!(new, i, j)
+                    count = count + 1
+                end
+            end
+        end
+        old = new
+        done = count == 0
+    end
+    title = "Result"
+    pic = plt(new, title = title) # 4 times (once in loop)
+    frame(anim, pic)
+    frame(anim, pic)
+    frame(anim, pic)
+    gif(anim, fileName, fps=2)
+    println()
+    new
+end
+
+z37 = zeros(Int64, 37, 37)
+m37 = fill(3, 37, 37)
+c37 = zeros(Int64, 37, 37)
+c37[19,19] = 1
+ccc37 = zeros(Int64, 37, 37)
+ccc37[19,19] = 3
+id37 = findId(37,37)
+
