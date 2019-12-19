@@ -456,7 +456,7 @@ function addPlotting(p1, p2, fileName)
         for i = 1:n
             for j = 1:m
                 if old[i,j] > 3
-                    toppleSize!(new, i, j)
+                    toppleSite!(new, i, j)
                     count = count + 1
                 end
             end
